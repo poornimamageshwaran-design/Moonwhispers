@@ -1,0 +1,40 @@
+@import url('https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght@0,300;0,400;0,600;0,700;1,300;1,400&family=DM+Sans:opsz,wght@9..40,300;9..40,400;9..40,500;9..40,600&display=swap');
+@import "tailwindcss";
+
+:root {
+  color-scheme: dark;
+
+  --color-accent: #c8956c;
+  --color-accent-soft: #e8b99a;
+  --color-accent-cold: #7ec8c8;
+  --color-moon: #f0e6c8;
+  --color-ember: #8b4513;
+  --shadow-soft: 0 10px 40px rgba(0,0,0,0.55);
+  --shadow-glow: 0 0 0 1px rgba(200,149,108,0.3), 0 0 30px rgba(200,149,108,0.15);
+  --shadow-moon: 0 0 60px rgba(240,230,200,0.1);
+}
+
+html, body {
+  height: 100%;
+}
+
+body {
+  background-color: #080c14;
+  color: #e8e0d0;
+  -webkit-font-smoothing: antialiased;
+  font-family: 'DM Sans', ui-sans-serif, system-ui, sans-serif;
+}
+
+h1, h2, h3, h4 {
+  font-family: 'Cormorant Garamond', Georgia, serif;
+}
+
+.noise {
+  pointer-events: none;
+  position: fixed;
+  inset: 0;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='200' height='200'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='.75' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='200' height='200' filter='url(%23n)' opacity='.18'/%3E%3C/svg%3E");
+  mix-blend-mode: overlay;
+  opacity: 0.18;
+  z-index: 999;
+}
