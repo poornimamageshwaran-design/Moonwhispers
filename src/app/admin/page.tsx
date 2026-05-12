@@ -111,66 +111,12 @@ function DeleteModal({ post, onConfirm, onCancel, loading }: {
   );
 }
 
-// ── Not-admin help screen ──────────────────────────────────────────────────
+// ── Not-admin: redirect to home ────────────────────────────────────────────
 function NotAdminScreen({ session, onRetry }: { session: any; onRetry: () => void }) {
-  return (
-    <div className="relative flex min-h-screen flex-col items-center justify-center px-4 pt-20 pb-12">
-      <div className="pointer-events-none absolute inset-0">
-        <div className="absolute top-1/3 left-1/2 -translate-x-1/2 w-[500px] h-[500px] rounded-full bg-[#cc4422]/5 blur-[110px]" />
-      </div>
-      <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.6 }}
-        className="relative w-full max-w-lg">
-        <p className="text-xs font-sans font-medium tracking-[0.22em] uppercase text-[#7ec8ff]/60 mb-3 text-center">Moon Whispers</p>
-        <h1 className="font-serif italic text-4xl font-light tracking-tight text-[#f0e6c8] mb-6 text-center">Access Restricted</h1>
-
-        <div className="rounded-2xl border border-[#1a2a3a]/70 bg-[#0a0e1a]/60 p-6 backdrop-blur-sm space-y-5">
-          <p className="text-sm font-sans font-light text-[#6a8aaa]">
-            Signed in as <span className="text-[#a0c8ff] font-medium">{session.user?.email}</span>, but this account does not have the <code className="text-[#7ec8ff] bg-[#1a2a3a]/60 px-1.5 py-0.5 rounded text-xs">admin</code> role.
-          </p>
-
-          <div>
-            <p className="text-xs font-sans font-medium tracking-[0.12em] uppercase text-[#6a8aaa] mb-2">
-              Run this in your Supabase SQL Editor:
-            </p>
-            <pre className="rounded-xl bg-[#080c14]/90 border border-[#1a2a3a]/70 px-4 py-3.5 text-xs font-mono text-[#7ec8ff] overflow-x-auto select-all leading-relaxed">
-{`-- Option A: promote by user ID (copy from below)
-UPDATE public.profiles
-SET role = 'admin'
-WHERE id = '${session.user?.id}';
-
--- Option B: promote by email
-UPDATE public.profiles p
-SET role = 'admin'
-FROM auth.users u
-WHERE p.id = u.id
-  AND u.email = '${session.user?.email}';`}
-            </pre>
-          </div>
-
-          <div className="rounded-xl bg-[#1a2a3a]/30 border border-[#1a2a3a]/50 px-4 py-3 text-xs font-sans text-[#4a7a9a] space-y-1 leading-relaxed">
-            <p><span className="text-[#6a8aaa]">Your user ID:</span> <span className="font-mono text-[#7ec8ff] select-all">{session.user?.id}</span></p>
-            <p><span className="text-[#6a8aaa]">Your email:</span> <span className="font-mono text-[#7ec8ff]">{session.user?.email}</span></p>
-          </div>
-
-          <p className="text-xs font-sans text-[#3a5a7a]">
-            After running the SQL, sign out and sign back in, then click Retry below.
-          </p>
-
-          <div className="flex gap-3 pt-1">
-            <button
-              onClick={async () => { await supabase.auth.signOut(); window.location.href = "/"; }}
-              className="flex-1 rounded-xl border border-[#1a2a3a]/80 px-4 py-2.5 text-sm font-sans text-[#6a8aaa] hover:text-[#a0c8ff] hover:border-[#5a9fff]/30 transition-all duration-200">
-              Sign out
-            </button>
-            <button onClick={onRetry}
-              className="flex-1 rounded-xl bg-[#2255cc] px-4 py-2.5 text-sm font-sans font-semibold text-white hover:bg-[#3366dd] transition-all duration-200">
-              Retry
-            </button>
-          </div>
-        </div>
-      </motion.div>
-    </div>
-  );
+  useEffect(() => {
+    window.location.href = "/";
+  }, []);
+  return null;
 }
 
 // ── Main admin page ────────────────────────────────────────────────────────
