@@ -1,161 +1,143 @@
--- ============================================================
--- MOONWHISPERS — Complete Auth Fix
--- Run this ONCE in Supabase SQL Editor (Dashboard → SQL Editor)
--- Safe to re-run: uses IF EXISTS / OR REPLACE guards everywhere
--- ============================================================
+-- Moonlight Notes - Supabase schema starter
+-- Run via Supabase migrations or SQL editor.
 
+create extension if not exists "pgcrypto";
 
--- ──────────────────────────────────────────────
--- 1. PROFILES TABLE
---    Create if missing; add columns if they were
---    added later so re-runs are always safe.
--- ──────────────────────────────────────────────
-CREATE TABLE IF NOT EXISTS public.profiles (
-  id          uuid PRIMARY KEY REFERENCES auth.users(id) ON DELETE CASCADE,
-  email       text,
-  role        text NOT NULL DEFAULT 'user'
-                   CHECK (role IN ('admin', 'user')),
-  created_at  timestamptz NOT NULL DEFAULT now(),
-  updated_at  timestamptz NOT NULL DEFAULT now()
+-- Profiles / RBAC
+create table if not exists public.profiles (
+  id uuid primary key references auth.users(id) on delete cascade,
+  display_name text,
+  role text not null default 'user' check (role in ('user', 'admin')),
+  created_at timestamptz not null default now()
 );
 
--- Add any missing columns idempotently
-DO $$
-BEGIN
-  IF NOT EXISTS (
-    SELECT 1 FROM information_schema.columns
-    WHERE table_schema = 'public'
-      AND table_name   = 'profiles'
-      AND column_name  = 'email'
-  ) THEN
-    ALTER TABLE public.profiles ADD COLUMN email text;
-  END IF;
+-- Posts (blog CMS)
+create table if not exists public.posts (
+  id uuid primary key default gen_random_uuid(),
+  author_id uuid references public.profiles(id) on delete set null,
+  title text not null,
+  slug text not null unique,
+  excerpt text,
+  content text not null,
+  cover_image_url text,
+  status text not null default 'draft' check (status in ('draft', 'published')),
+  published_at timestamptz,
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now()
+);
 
-  IF NOT EXISTS (
-    SELECT 1 FROM information_schema.columns
-    WHERE table_schema = 'public'
-      AND table_name   = 'profiles'
-      AND column_name  = 'role'
-  ) THEN
-    ALTER TABLE public.profiles
-      ADD COLUMN role text NOT NULL DEFAULT 'user'
-      CHECK (role IN ('admin', 'user'));
-  END IF;
-END
-$$;
+create or replace function public.set_updated_at()
+returns trigger as $$
+begin
+  new.updated_at = now();
+  return new;
+end;
+$$ language plpgsql;
 
+drop trigger if exists set_posts_updated_at on public.posts;
+create trigger set_posts_updated_at
+before update on public.posts
+for each row
+execute function public.set_updated_at();
 
--- ──────────────────────────────────────────────
--- 2. RLS — Enable and set policies
--- ──────────────────────────────────────────────
-ALTER TABLE public.profiles ENABLE ROW LEVEL SECURITY;
+-- Comments (on published posts)
+create table if not exists public.comments (
+  id uuid primary key default gen_random_uuid(),
+  post_id uuid not null references public.posts(id) on delete cascade,
+  author_id uuid references public.profiles(id) on delete cascade,
+  content text not null,
+  created_at timestamptz not null default now()
+);
 
--- Drop old policies cleanly before recreating
-DROP POLICY IF EXISTS "Users can view own profile"   ON public.profiles;
-DROP POLICY IF EXISTS "Users can update own profile" ON public.profiles;
-DROP POLICY IF EXISTS "Service role full access"     ON public.profiles;
+-- Contact form capture
+create table if not exists public.contact_messages (
+  id uuid primary key default gen_random_uuid(),
+  name text not null,
+  email text not null,
+  message text not null,
+  created_at timestamptz not null default now()
+);
 
--- Authenticated users see only their own row
-CREATE POLICY "Users can view own profile"
-  ON public.profiles FOR SELECT
-  USING (auth.uid() = id);
+-- Newsletter subscribers
+create table if not exists public.newsletter_subscribers (
+  id uuid primary key default gen_random_uuid(),
+  email text not null unique,
+  created_at timestamptz not null default now()
+);
 
--- Authenticated users update only their own row
-CREATE POLICY "Users can update own profile"
-  ON public.profiles FOR UPDATE
-  USING (auth.uid() = id)
-  WITH CHECK (auth.uid() = id);
+-- Storage bucket (optional; create it in Supabase UI if not present)
+-- Bucket name used by code: "uploads"
 
--- Service-role (used by triggers + server-side code) has unrestricted access
-CREATE POLICY "Service role full access"
-  ON public.profiles FOR ALL
-  USING      (auth.jwt() ->> 'role' = 'service_role')
-  WITH CHECK (auth.jwt() ->> 'role' = 'service_role');
+-- Enable RLS
+alter table public.profiles enable row level security;
+alter table public.posts enable row level security;
+alter table public.comments enable row level security;
+alter table public.contact_messages enable row level security;
+alter table public.newsletter_subscribers enable row level security;
 
+-- RLS: posts
+create policy "Posts are publicly readable (published only)"
+on public.posts for select
+using (status = 'published');
 
--- ──────────────────────────────────────────────
--- 3. TRIGGER FUNCTION
---    Runs as SECURITY DEFINER so it can bypass
---    RLS and write the new profile row.
--- ──────────────────────────────────────────────
-CREATE OR REPLACE FUNCTION public.handle_new_user()
-RETURNS trigger
-LANGUAGE plpgsql
-SECURITY DEFINER
-SET search_path = public
-AS $$
-DECLARE
-  _role text := 'user';
-BEGIN
-  -- Promote the very first user to admin automatically,
-  -- OR check a custom claim / metadata if you prefer.
-  -- To hard-code an admin email, uncomment the block below:
-  --
-  -- IF NEW.email = 'admin@yourdomain.com' THEN
-  --   _role := 'admin';
-  -- END IF;
-
-  -- Check raw_user_meta_data for a role hint (optional)
-  IF (NEW.raw_user_meta_data ->> 'role') = 'admin' THEN
-    _role := 'admin';
-  END IF;
-
-  INSERT INTO public.profiles (id, email, role, created_at, updated_at)
-  VALUES (
-    NEW.id,
-    NEW.email,
-    _role,
-    NOW(),
-    NOW()
+-- RLS: comments
+create policy "Published post comments are publicly readable"
+on public.comments for select
+using (
+  exists (
+    select 1 from public.posts p
+    where p.id = comments.post_id and p.status = 'published'
   )
-  ON CONFLICT (id) DO UPDATE          -- safe if row already exists
-    SET email      = EXCLUDED.email,
-        updated_at = NOW();
+);
 
-  RETURN NEW;
-END;
-$$;
+create policy "Authenticated users can insert comments"
+on public.comments for insert
+with check (
+  auth.uid() = author_id
+  and exists (
+    select 1 from public.posts p
+    where p.id = comments.post_id and p.status = 'published'
+  )
+);
 
--- Grant execute so the trigger can fire even from restricted contexts
-GRANT EXECUTE ON FUNCTION public.handle_new_user() TO supabase_auth_admin;
+-- RLS: contact messages (allow insert)
+create policy "Contact messages can be inserted"
+on public.contact_messages for insert
+with check (true);
+
+-- RLS: newsletter subscribers (allow insert)
+create policy "Newsletter subscribers can be inserted"
+on public.newsletter_subscribers for insert
+with check (true);
+
+-- RLS: profiles (public select for your own row)
+create policy "Users can read their own profile"
+on public.profiles for select
+using (id = auth.uid());
+
+-- Admin policies (optional; protected in code via service role)
+-- If you rely on RLS for admin, add policies like:
+-- exists (select 1 from profiles pr where pr.id = auth.uid() and pr.role='admin')
+
+-- Auto-create a profile row for new auth users
+create or replace function public.handle_new_user()
+returns trigger as $$
+begin
+  insert into public.profiles (id, display_name, role)
+  values (
+    new.id,
+    coalesce(new.raw_user_meta_data->>'display_name', new.raw_user_meta_data->>'full_name'),
+    'user'
+  )
+  on conflict (id) do nothing;
+
+  return new;
+end;
+$$ language plpgsql security definer set search_path = public;
+
+drop trigger if exists on_auth_user_created on auth.users;
+create trigger on_auth_user_created
+after insert on auth.users
+for each row execute function public.handle_new_user();
 
 
--- ──────────────────────────────────────────────
--- 4. TRIGGER
---    DROP IF EXISTS first → eliminates the
---    "trigger already exists" error you hit.
--- ──────────────────────────────────────────────
-DROP TRIGGER IF EXISTS on_auth_user_created ON auth.users;
-
-CREATE TRIGGER on_auth_user_created
-  AFTER INSERT ON auth.users
-  FOR EACH ROW
-  EXECUTE PROCEDURE public.handle_new_user();
-
-
--- ──────────────────────────────────────────────
--- 5. BACK-FILL — create profiles for any existing
---    auth.users rows that have no profile yet
--- ──────────────────────────────────────────────
-INSERT INTO public.profiles (id, email, role, created_at, updated_at)
-SELECT
-  u.id,
-  u.email,
-  'user',
-  u.created_at,
-  NOW()
-FROM auth.users u
-WHERE NOT EXISTS (
-  SELECT 1 FROM public.profiles p WHERE p.id = u.id
-)
-ON CONFLICT (id) DO NOTHING;
-
-
--- ──────────────────────────────────────────────
--- 6. GRANT table access to authenticated role
--- ──────────────────────────────────────────────
-GRANT SELECT, INSERT, UPDATE ON public.profiles TO authenticated;
-GRANT SELECT, INSERT, UPDATE ON public.profiles TO service_role;
-
-
--- Done ✓
