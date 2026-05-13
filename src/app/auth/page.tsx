@@ -135,7 +135,7 @@ async function submit(e: React.FormEvent) {
                       onChange={(e) => setDisplayName(e.target.value)}
                       type="text"
                       autoComplete="name"
-                      placeholder="e.g. Sabari"
+                      placeholder="e.g. Adam"
                     />
                   </div>
                 </motion.div>
