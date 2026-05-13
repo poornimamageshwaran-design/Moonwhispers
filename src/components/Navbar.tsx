@@ -3,7 +3,6 @@
 import Link from "next/link";
 import { useEffect, useState } from "react";
 import { motion } from "framer-motion";
-import { Button } from "@/components/ui/Button";
 import { cn } from "@/lib/cn";
 import { Container } from "@/components/ui/Container";
 import { supabase } from "@/lib/supabase/browserClient";
@@ -11,7 +10,7 @@ import { supabase } from "@/lib/supabase/browserClient";
 const navLinks = [
   { href: "/", label: "Home" },
   { href: "/posts", label: "Notes" },
-  { href: "/about", label: "About" }
+  { href: "/about", label: "About" },
 ];
 
 export default function Navbar() {
@@ -19,16 +18,30 @@ export default function Navbar() {
   const [scrolled, setScrolled] = useState(false);
   const [mobileOpen, setMobileOpen] = useState(false);
   const [user, setUser] = useState<{ email?: string } | null>(null);
+  const [isAdmin, setIsAdmin] = useState(false);
 
   useEffect(() => {
-    supabase.auth.getSession().then(({ data }) => {
-      setUser(data.session?.user ?? null);
+    supabase.auth.getSession().then(async ({ data }) => {
+      const u = data.session?.user ?? null;
+      setUser(u);
+      if (u) checkAdmin(u.id);
     });
     const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
-      setUser(session?.user ?? null);
+      const u = session?.user ?? null;
+      setUser(u);
+      if (u) checkAdmin(u.id); else setIsAdmin(false);
     });
     return () => subscription.unsubscribe();
   }, []);
+
+  async function checkAdmin(userId: string) {
+    const { data } = await supabase
+      .from("profiles")
+      .select("role")
+      .eq("id", userId)
+      .single();
+    setIsAdmin(data?.role === "admin");
+  }
 
   useEffect(() => {
     let lastY = window.scrollY;
@@ -54,6 +67,7 @@ export default function Navbar() {
   async function handleSignOut() {
     await supabase.auth.signOut();
     setUser(null);
+    setIsAdmin(false);
     window.location.href = "/";
   }
 
@@ -75,9 +89,7 @@ export default function Navbar() {
           <Link href="/" className="flex items-center gap-3 group">
             <span className="relative inline-flex h-9 w-9 shrink-0 transition-all duration-500 group-hover:drop-shadow-[0_0_8px_rgba(126,200,255,0.5)]">
               <svg viewBox="0 0 36 36" fill="none" xmlns="http://www.w3.org/2000/svg" className="w-full h-full">
-                {/* Outer spiky sun-ring */}
                 <circle cx="18" cy="18" r="14" stroke="url(#outerRing)" strokeWidth="1" fill="none" opacity="0.7"/>
-                {/* Spike rays */}
                 {[0,30,60,90,120,150,180,210,240,270,300,330].map((deg, i) => {
                   const rad = (deg * Math.PI) / 180;
                   const x1 = +(18 + 13 * Math.cos(rad)).toFixed(4);
@@ -85,24 +97,12 @@ export default function Navbar() {
                   const x2 = +(18 + 16.5 * Math.cos(rad)).toFixed(4);
                   const y2 = +(18 + 16.5 * Math.sin(rad)).toFixed(4);
                   return (
-                    <line
-                      key={i}
-                      x1={x1} y1={y1}
-                      x2={x2} y2={y2}
-                      stroke="url(#spikeGrad)"
-                      strokeWidth="1.2"
-                      strokeLinecap="round"
-                      opacity="0.75"
-                    />
+                    <line key={i} x1={x1} y1={y1} x2={x2} y2={y2}
+                      stroke="url(#spikeGrad)" strokeWidth="1.2" strokeLinecap="round" opacity="0.75" />
                   );
                 })}
-                {/* Inner crescent moon */}
-                <path
-                  d="M18 6 C11 6 6 11.5 6 18 C6 24.5 11 30 18 30 C13 27 10 23 10 18 C10 13 13 9 18 6Z"
-                  fill="url(#crescentFill)"
-                  opacity="0.9"
-                />
-                {/* Star compass center */}
+                <path d="M18 6 C11 6 6 11.5 6 18 C6 24.5 11 30 18 30 C13 27 10 23 10 18 C10 13 13 9 18 6Z"
+                  fill="url(#crescentFill)" opacity="0.9" />
                 <g transform="translate(14.5, 14.5)">
                   <line x1="3" y1="0" x2="3" y2="6" stroke="#7ec8ff" strokeWidth="0.7" strokeLinecap="round" opacity="0.9"/>
                   <line x1="0" y1="3" x2="6" y2="3" stroke="#7ec8ff" strokeWidth="0.7" strokeLinecap="round" opacity="0.9"/>
@@ -111,7 +111,6 @@ export default function Navbar() {
                   <circle cx="3" cy="3" r="1.2" fill="#b8e8ff" opacity="0.95"/>
                   <circle cx="3" cy="3" r="0.5" fill="white"/>
                 </g>
-                {/* Dotted arc on crescent */}
                 <path d="M14 8 Q11 13 11 18 Q11 23 14 28" stroke="#7ec8ff" strokeWidth="0.6" strokeDasharray="1.2 2" fill="none" opacity="0.5"/>
                 <defs>
                   <linearGradient id="outerRing" x1="0" y1="0" x2="36" y2="36" gradientUnits="userSpaceOnUse">
@@ -138,48 +137,55 @@ export default function Navbar() {
           {/* Desktop nav */}
           <nav className="hidden md:flex items-center gap-8">
             {navLinks.map((l) => (
-              <Link
-                key={l.href}
-                href={l.href}
-                className="text-sm font-sans font-light text-[#b8a898]/80 hover:text-moon transition-colors duration-300 tracking-wide"
-              >
+              <Link key={l.href} href={l.href}
+                className="text-sm font-sans font-light text-[#b8a898]/80 hover:text-moon transition-colors duration-300 tracking-wide">
                 {l.label}
               </Link>
             ))}
-            <Link
-              href="/admin"
-              className="text-sm font-sans font-light text-[#b8a898]/80 hover:text-moon transition-colors duration-300 tracking-wide"
-            >
-              Admin
-            </Link>
+            {isAdmin && (
+              <Link href="/admin"
+                className="text-sm font-sans font-light text-[#b8a898]/80 hover:text-moon transition-colors duration-300 tracking-wide">
+                Admin
+              </Link>
+            )}
           </nav>
 
           {/* Actions */}
           <div className="flex items-center gap-3">
             {user ? (
               <div className="hidden sm:flex items-center gap-3">
-                <span className="text-xs text-[#7a6a5a] truncate max-w-[120px] font-sans">{user.email}</span>
+                <span className="text-xs text-[#7a8a9a] truncate max-w-[120px] font-sans">{user.email}</span>
                 <button
                   onClick={handleSignOut}
-                  className="rounded-xl border border-[#2a1f14] px-4 py-2 text-sm font-sans font-light text-[#b8a898] hover:border-accent/40 hover:text-moon transition-all duration-300"
+                  className="rounded-xl border border-[#1a2a3a]/80 px-4 py-2 text-sm font-sans font-light text-[#a0b8cc] hover:border-[#5a9fff]/40 hover:text-[#c0d8f0] transition-all duration-300"
                 >
                   Sign out
                 </button>
               </div>
             ) : (
               <div className="hidden sm:flex">
-                <Button href="/auth" className="rounded-xl">
+                <Link
+                  href="/auth"
+                  className="relative inline-flex items-center gap-2 rounded-xl px-5 py-2 text-sm font-sans font-medium text-[#a0c8ff] border border-[#2a4a7a]/70 bg-[#0d1830]/60 hover:border-[#5a9fff]/60 hover:text-[#c8e4ff] hover:bg-[#0d1830]/90 hover:shadow-[0_0_18px_rgba(90,160,255,0.15)] transition-all duration-300 backdrop-blur-sm"
+                >
+                  {/* Subtle star icon */}
+                  <svg width="12" height="12" viewBox="0 0 12 12" fill="none" className="opacity-70">
+                    <line x1="6" y1="0" x2="6" y2="12" stroke="#7ec8ff" strokeWidth="1" strokeLinecap="round"/>
+                    <line x1="0" y1="6" x2="12" y2="6" stroke="#7ec8ff" strokeWidth="1" strokeLinecap="round"/>
+                    <line x1="1.8" y1="1.8" x2="10.2" y2="10.2" stroke="#7ec8ff" strokeWidth="0.7" strokeLinecap="round" opacity="0.6"/>
+                    <line x1="10.2" y1="1.8" x2="1.8" y2="10.2" stroke="#7ec8ff" strokeWidth="0.7" strokeLinecap="round" opacity="0.6"/>
+                  </svg>
                   Sign in
-                </Button>
+                </Link>
               </div>
             )}
 
             <button
               aria-label="Open menu"
-              className="md:hidden inline-flex items-center justify-center rounded-xl border border-[#2a1f14]/70 bg-[#0e1220]/60 w-10 h-10 hover:border-accent/30 transition-all duration-300"
+              className="md:hidden inline-flex items-center justify-center rounded-xl border border-[#1a2a3a]/70 bg-[#0e1220]/60 w-10 h-10 hover:border-[#5a9fff]/30 transition-all duration-300"
               onClick={() => setMobileOpen((v) => !v)}
             >
-              <span className="text-moon/70 text-base">{mobileOpen ? "×" : "≡"}</span>
+              <span className="text-[#a0c8ff]/70 text-base">{mobileOpen ? "×" : "≡"}</span>
             </button>
           </div>
         </div>
@@ -191,37 +197,31 @@ export default function Navbar() {
             exit={{ opacity: 0, height: 0 }}
             className="md:hidden mt-4 overflow-hidden"
           >
-            <div className="rounded-2xl border border-[#2a1f14]/60 bg-[#080c14]/85 backdrop-blur-xl p-5">
+            <div className="rounded-2xl border border-[#1a2a3a]/60 bg-[#080c14]/85 backdrop-blur-xl p-5">
               <div className="flex flex-col gap-4">
                 {navLinks.map((l) => (
-                  <Link
-                    key={l.href}
-                    href={l.href}
-                    onClick={() => setMobileOpen(false)}
-                    className="text-sm font-sans font-light text-[#b8a898] hover:text-moon transition-colors"
-                  >
+                  <Link key={l.href} href={l.href} onClick={() => setMobileOpen(false)}
+                    className="text-sm font-sans font-light text-[#b8a898] hover:text-moon transition-colors">
                     {l.label}
                   </Link>
                 ))}
-                <Link
-                  href="/admin"
-                  onClick={() => setMobileOpen(false)}
-                  className="text-sm font-sans font-light text-[#b8a898] hover:text-moon transition-colors"
-                >
-                  Admin
-                </Link>
-                <div className="pt-2 border-t border-[#2a1f14]/50">
+                {isAdmin && (
+                  <Link href="/admin" onClick={() => setMobileOpen(false)}
+                    className="text-sm font-sans font-light text-[#b8a898] hover:text-moon transition-colors">
+                    Admin
+                  </Link>
+                )}
+                <div className="pt-2 border-t border-[#1a2a3a]/50">
                   {user ? (
-                    <button
-                      onClick={handleSignOut}
-                      className="w-full rounded-xl border border-[#2a1f14] px-4 py-2 text-sm font-sans font-light text-[#b8a898] hover:border-accent/40 transition-all"
-                    >
+                    <button onClick={handleSignOut}
+                      className="w-full rounded-xl border border-[#1a2a3a]/80 px-4 py-2 text-sm font-sans font-light text-[#a0b8cc] hover:border-[#5a9fff]/40 transition-all">
                       Sign out
                     </button>
                   ) : (
-                    <Button href="/auth" className="w-full justify-center">
+                    <Link href="/auth" onClick={() => setMobileOpen(false)}
+                      className="flex items-center justify-center gap-2 w-full rounded-xl border border-[#2a4a7a]/70 bg-[#0d1830]/60 px-4 py-2.5 text-sm font-sans font-medium text-[#a0c8ff] hover:border-[#5a9fff]/60 transition-all">
                       Sign in
-                    </Button>
+                    </Link>
                   )}
                 </div>
               </div>
