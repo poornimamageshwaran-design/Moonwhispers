@@ -1,51 +1,38 @@
+import { createServerClient } from "@supabase/ssr";
+import { NextResponse, type NextRequest } from "next/server";
 
-import React from 'react'
-import { useAuth } from '../lib/useAuth'
-import type { UserRole } from '../lib/supabaseClient'
+export async function middleware(request: NextRequest) {
+  let supabaseResponse = NextResponse.next({ request });
 
-interface Props {
-  children:  React.ReactNode
-  role?:     UserRole   // if supplied, only that role can access
-  fallback?: React.ReactNode  // shown while loading
+  const supabase = createServerClient(
+    process.env.NEXT_PUBLIC_SUPABASE_URL!,
+    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
+    {
+      cookies: {
+        getAll() {
+          return request.cookies.getAll();
+        },
+        setAll(cookiesToSet) {
+          cookiesToSet.forEach(({ name, value }) =>
+            request.cookies.set(name, value)
+          );
+          supabaseResponse = NextResponse.next({ request });
+          cookiesToSet.forEach(({ name, value, options }) =>
+            supabaseResponse.cookies.set(name, value, options)
+          );
+        }
+      }
+    }
+  );
+
+  // Refresh session so it persists across page loads
+  await supabase.auth.getUser();
+
+  return supabaseResponse;
 }
 
-export default function ProtectedRoute({ children, role, fallback }: Props) {
-  const { user, profile, loading, initialized } = useAuth()
-
-  // ── Still resolving session ──────────────────────────────────────────────
-  if (!initialized || loading) {
-    return fallback
-      ? <>{fallback}</>
-      : <LoadingSpinner />
-  }
-
-  // ── Not logged in → go to login page ────────────────────────────────────
-  if (!user) {
-    window.location.href = '/'
-    return null
-  }
-
-  // ── Wrong role → go to their own dashboard ───────────────────────────────
-  if (role && profile?.role !== role) {
-    window.location.href = profile?.role === 'admin' ? '/admin/dashboard' : '/dashboard'
-    return null
-  }
-
-  return <>{children}</>
-}
-
-function LoadingSpinner() {
-  return (
-    <div style={{
-      minHeight: '100vh',
-      display: 'flex',
-      alignItems: 'center',
-      justifyContent: 'center',
-      background: '#0d1117',
-      color: '#8b949e',
-      fontSize: '1rem',
-    }}>
-      Loading…
-    </div>
-  )
-}
+export const config = {
+  matcher: [
+    "/((?!_next/static|_next/image|favicon.ico|.*\\.(?:svg|png|jpg|jpeg|gif|webp)$).*)"
+  ]
+};
