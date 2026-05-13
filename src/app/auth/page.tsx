@@ -11,17 +11,12 @@ export default function AuthPage() {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [displayName, setDisplayName] = useState("");
-  const [username, setUsername] = useState("");
   const [status, setStatus] = useState<string | null>(null);
   const [isError, setIsError] = useState(false);
   const [loading, setLoading] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
 
-  function handleUsernameChange(val: string) {
-    setUsername(val.toLowerCase().replace(/[^a-z0-9_.]/g, "").slice(0, 30));
-  }
-
-  async function submit(e: React.FormEvent) {
+async function submit(e: React.FormEvent) {
     e.preventDefault();
     setStatus(null);
     setLoading(true);
@@ -32,7 +27,6 @@ export default function AuthPage() {
         router.push("/");
       } else {
         if (!displayName.trim()) throw new Error("Please enter your name.");
-        if (!username.trim()) throw new Error("Please choose a username.");
 
         const { data, error } = await supabase.auth.signUp({
           email,
@@ -40,7 +34,6 @@ export default function AuthPage() {
           options: {
             data: {
               display_name: displayName.trim(),
-              username: username.trim(),
             },
           },
         });
@@ -51,7 +44,6 @@ export default function AuthPage() {
           await supabase.from("profiles").upsert({
             id: data.user!.id,
             display_name: displayName.trim(),
-            username: username.trim(),
           });
           router.push("/");
         } else {
@@ -145,24 +137,6 @@ export default function AuthPage() {
                       autoComplete="name"
                       placeholder="e.g. Sabari"
                     />
-                  </div>
-                  <div>
-                    <label className={labelClass}>Username</label>
-                    <div className="relative mt-2">
-                      <span className="absolute left-4 top-1/2 -translate-y-1/2 text-sm text-[#3a5a7a] font-sans select-none">@</span>
-                      <input
-                        className={inputClass + " mt-0 pl-8"}
-                        value={username}
-                        onChange={(e) => handleUsernameChange(e.target.value)}
-                        type="text"
-                        autoComplete="username"
-                        placeholder="yourname"
-                        maxLength={30}
-                      />
-                    </div>
-                    <p className="mt-1.5 text-[10px] font-sans text-[#2a3a4a]">
-                      Letters, numbers, dots and underscores only.
-                    </p>
                   </div>
                 </motion.div>
               )}
