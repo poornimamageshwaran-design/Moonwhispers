@@ -1,217 +1,239 @@
-"use client";
+// src/components/AuthForm.tsx
+// Drop-in replacement for your existing Sign In / Sign Up form.
+// Matches the dark-mode design visible in the screenshot.
 
-import { useState } from "react";
-import { supabase } from "@/lib/supabase/browserClient";
-import { useRouter } from "next/navigation";
-import { motion, AnimatePresence } from "framer-motion";
+import React, { useState } from 'react'
+import { useAuth } from '../lib/useAuth'
 
-export default function AuthPage() {
-  const router = useRouter();
-  const [mode, setMode] = useState<"signin" | "signup">("signin");
-  const [email, setEmail] = useState("");
-  const [password, setPassword] = useState("");
-  const [displayName, setDisplayName] = useState("");
-  const [status, setStatus] = useState<string | null>(null);
-  const [isError, setIsError] = useState(false);
-  const [loading, setLoading] = useState(false);
-  const [showPassword, setShowPassword] = useState(false);
+type Tab = 'signin' | 'signup'
 
-async function submit(e: React.FormEvent) {
-    e.preventDefault();
-    setStatus(null);
-    setLoading(true);
-    try {
-      if (mode === "signin") {
-        const { error } = await supabase.auth.signInWithPassword({ email, password });
-        if (error) throw error;
-        router.push("/");
+export default function AuthForm() {
+  const { signIn, signUp, loading } = useAuth()
+
+  const [tab,      setTab]      = useState<Tab>('signup')
+  const [email,    setEmail]    = useState('')
+  const [password, setPassword] = useState('')
+  const [error,    setError]    = useState<string | null>(null)
+  const [info,     setInfo]     = useState<string | null>(null)  // e.g. "check your email"
+
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault()
+    setError(null)
+    setInfo(null)
+
+    // Basic client-side validation
+    if (!email.trim()) { setError('Email is required.'); return }
+    if (password.length < 6) { setError('Password must be at least 6 characters.'); return }
+
+    if (tab === 'signup') {
+      const { error: err } = await signUp(email.trim(), password)
+      if (err) {
+        setError(err)
       } else {
-        if (!displayName.trim()) throw new Error("Please enter your name.");
-
-        const { data, error } = await supabase.auth.signUp({
-          email,
-          password,
-          options: {
-            data: {
-              display_name: displayName.trim(),
-            },
-          },
-        });
-        if (error) throw error;
-
-        // Update profile immediately if session exists (email confirm disabled)
-        if (data.session) {
-          await supabase.from("profiles").upsert({
-            id: data.user!.id,
-            display_name: displayName.trim(),
-          });
-          router.push("/");
-        } else {
-          setIsError(false);
-          setStatus("Almost there! Check your email to confirm your account.");
-        }
+        // If Supabase email confirmation is ON, session won't exist yet
+        setInfo('Account created! Check your email to confirm, then sign in.')
       }
-    } catch (err) {
-      setIsError(true);
-      setStatus((err as Error).message);
-    } finally {
-      setLoading(false);
+      // If confirmation is OFF, useAuth redirects automatically via redirectByRole()
+    } else {
+      const { error: err } = await signIn(email.trim(), password)
+      if (err) setError(err)
+      // On success, useAuth's onAuthStateChange fires → loadProfile → redirectByRole()
     }
   }
 
-  const inputClass =
-    "mt-2 w-full rounded-xl border border-[#1a2a3a]/80 bg-[#080c14]/60 px-4 py-3 text-sm font-sans text-[#d0e8f8] placeholder-[#2a3a4a] outline-none transition-all duration-200 focus:border-[#5a9fff]/50 focus:bg-[#080c14]/80 focus:shadow-[0_0_0_1px_rgba(90,160,255,0.12)]";
-  const labelClass =
-    "text-xs font-sans font-medium tracking-[0.15em] uppercase text-[#6a8aaa]";
-
   return (
-    <div className="relative flex min-h-screen flex-col items-center justify-center px-4 pt-20 pb-12 overflow-hidden">
-      {/* Ambient background */}
-      <div className="pointer-events-none absolute inset-0">
-        <div className="absolute top-1/4 left-1/2 -translate-x-1/2 w-[600px] h-[600px] rounded-full bg-[#2255cc]/8 blur-[130px]" />
-        <div className="absolute bottom-1/4 right-1/4 w-[400px] h-[400px] rounded-full bg-[#7ec8ff]/5 blur-[110px]" />
+    <div style={styles.page}>
+      <h1 style={styles.title}>Join us</h1>
+      <p style={styles.subtitle}>Create an account to get started.</p>
+
+      <div style={styles.card}>
+        {/* ── Tab switcher ── */}
+        <div style={styles.tabs}>
+          <button
+            type="button"
+            onClick={() => { setTab('signin'); setError(null); setInfo(null) }}
+            style={tab === 'signin' ? styles.tabActive : styles.tabInactive}
+          >
+            Sign in
+          </button>
+          <button
+            type="button"
+            onClick={() => { setTab('signup'); setError(null); setInfo(null) }}
+            style={tab === 'signup' ? styles.tabActive : styles.tabInactive}
+          >
+            Sign up
+          </button>
+        </div>
+
+        {/* ── Form ── */}
+        <form onSubmit={handleSubmit} style={styles.form}>
+          <label style={styles.label}>EMAIL</label>
+          <input
+            type="email"
+            value={email}
+            onChange={e => setEmail(e.target.value)}
+            placeholder="you@example.com"
+            required
+            style={styles.input}
+            autoComplete="email"
+          />
+
+          <label style={styles.label}>PASSWORD</label>
+          <input
+            type="password"
+            value={password}
+            onChange={e => setPassword(e.target.value)}
+            placeholder="••••••••"
+            required
+            style={styles.input}
+            autoComplete={tab === 'signup' ? 'new-password' : 'current-password'}
+          />
+
+          {/* Error banner */}
+          {error && (
+            <div style={styles.errorBanner} role="alert">
+              {error}
+            </div>
+          )}
+
+          {/* Info banner */}
+          {info && (
+            <div style={styles.infoBanner} role="status">
+              {info}
+            </div>
+          )}
+
+          <button
+            type="submit"
+            disabled={loading}
+            style={loading ? { ...styles.submitBtn, opacity: 0.6 } : styles.submitBtn}
+          >
+            {loading
+              ? (tab === 'signup' ? 'Creating account…' : 'Signing in…')
+              : (tab === 'signup' ? 'Create account'    : 'Sign in')}
+          </button>
+        </form>
       </div>
-
-      <motion.div
-        initial={{ opacity: 0, y: 24 }}
-        animate={{ opacity: 1, y: 0 }}
-        transition={{ duration: 0.7, ease: [0.2, 0.9, 0.2, 1] }}
-        className="relative w-full max-w-md"
-      >
-        {/* Header */}
-        <div className="mb-8 text-center">
-          <p className="text-xs font-sans font-medium tracking-[0.22em] uppercase text-[#7ec8ff]/60 mb-3">
-            Moon Whispers
-          </p>
-          <h1 className="font-serif italic text-4xl font-light tracking-tight text-[#f0e6c8]">
-            {mode === "signin" ? "Welcome back" : "Join us"}
-          </h1>
-          <p className="mt-3 text-sm font-sans font-light text-[#8a9aaa] leading-relaxed">
-            {mode === "signin"
-              ? "Sign in to continue writing."
-              : "Create your account and start sharing."}
-          </p>
-        </div>
-
-        {/* Card */}
-        <div className="rounded-3xl border border-[#1a2a3a]/80 bg-[#0a0e1a]/70 p-7 shadow-[0_10px_40px_rgba(0,0,0,0.6)] backdrop-blur-sm">
-
-          {/* Mode toggle */}
-          <div className="flex gap-2 mb-7 p-1 rounded-2xl bg-[#080c14]/70 border border-[#1a2a3a]/60">
-            {(["signin", "signup"] as const).map((m) => (
-              <button
-                key={m}
-                type="button"
-                onClick={() => { setMode(m); setStatus(null); }}
-                className={`flex-1 rounded-xl px-4 py-2.5 text-sm font-sans font-medium transition-all duration-300 ${
-                  mode === m
-                    ? "bg-[#2255cc] text-white shadow-[0_0_0_1px_rgba(90,160,255,0.35),0_0_22px_rgba(90,160,255,0.18)]"
-                    : "text-[#6a8aaa] hover:text-[#a0c8ff]"
-                }`}
-              >
-                {m === "signin" ? "Sign in" : "Sign up"}
-              </button>
-            ))}
-          </div>
-
-          <form onSubmit={submit} className="space-y-4">
-
-            {/* Sign-up only fields */}
-            <AnimatePresence>
-              {mode === "signup" && (
-                <motion.div
-                  key="signup-fields"
-                  initial={{ opacity: 0, height: 0 }}
-                  animate={{ opacity: 1, height: "auto" }}
-                  exit={{ opacity: 0, height: 0 }}
-                  transition={{ duration: 0.25 }}
-                  className="space-y-4 overflow-hidden"
-                >
-                  <div>
-                    <label className={labelClass}>Your Name</label>
-                    <input
-                      className={inputClass}
-                      value={displayName}
-                      onChange={(e) => setDisplayName(e.target.value)}
-                      type="text"
-                      autoComplete="name"
-                      placeholder="e.g. Adam"
-                    />
-                  </div>
-                </motion.div>
-              )}
-            </AnimatePresence>
-
-            <div>
-              <label className={labelClass}>Email</label>
-              <input
-                className={inputClass}
-                value={email}
-                onChange={(e) => setEmail(e.target.value)}
-                type="email"
-                autoComplete="email"
-                placeholder="you@example.com"
-              />
-            </div>
-
-            <div>
-              <label className={labelClass}>Password</label>
-              <div className="relative mt-2">
-                <input
-                  className={inputClass + " mt-0 pr-12"}
-                  value={password}
-                  onChange={(e) => setPassword(e.target.value)}
-                  type={showPassword ? "text" : "password"}
-                  autoComplete={mode === "signin" ? "current-password" : "new-password"}
-                  placeholder="••••••••"
-                />
-                <button
-                  type="button"
-                  onClick={() => setShowPassword((v) => !v)}
-                  className="absolute right-4 top-1/2 -translate-y-1/2 text-[#3a5a7a] hover:text-[#7ec8ff] transition-colors text-xs font-sans"
-                >
-                  {showPassword ? "Hide" : "Show"}
-                </button>
-              </div>
-            </div>
-
-            <AnimatePresence>
-              {status && (
-                <motion.div
-                  initial={{ opacity: 0, y: -6 }}
-                  animate={{ opacity: 1, y: 0 }}
-                  exit={{ opacity: 0 }}
-                  className={`rounded-xl border px-4 py-3 text-sm font-sans ${
-                    isError
-                      ? "border-red-900/50 bg-red-950/30 text-red-400"
-                      : "border-[#5a9fff]/25 bg-[#2255cc]/10 text-[#a0c8ff]"
-                  }`}
-                >
-                  {status}
-                </motion.div>
-              )}
-            </AnimatePresence>
-
-            <button
-              type="submit"
-              disabled={loading}
-              className="w-full rounded-xl bg-[#2255cc] px-5 py-3.5 text-sm font-sans font-semibold text-white shadow-[0_0_0_1px_rgba(90,160,255,0.35),0_0_30px_rgba(90,160,255,0.18)] hover:bg-[#3366dd] hover:shadow-[0_0_0_1px_rgba(126,200,255,0.45),0_0_35px_rgba(126,200,255,0.25)] transition-all duration-300 disabled:opacity-50 mt-2"
-            >
-              {loading
-                ? "Working…"
-                : mode === "signin"
-                ? "Sign in"
-                : "Create account"}
-            </button>
-          </form>
-        </div>
-
-        <p className="mt-6 text-center text-xs font-sans font-light text-[#2a3a4a]">
-          <a href="/" className="hover:text-[#6a8aaa] transition-colors">
-            ← Back to Moon Whispers
-          </a>
-        </p>
-      </motion.div>
     </div>
-  );
+  )
+}
+
+// ── Inline styles matching the dark-mode screenshot ──────────────────────────
+const styles: Record<string, React.CSSProperties> = {
+  page: {
+    minHeight: '100vh',
+    backgroundColor: '#0d1117',
+    display: 'flex',
+    flexDirection: 'column',
+    alignItems: 'center',
+    justifyContent: 'center',
+    fontFamily: 'Inter, system-ui, sans-serif',
+    color: '#e6edf3',
+    padding: '24px',
+  },
+  title: {
+    fontFamily: 'Georgia, serif',
+    fontStyle: 'italic',
+    fontSize: '2.5rem',
+    marginBottom: '8px',
+    fontWeight: 400,
+  },
+  subtitle: {
+    color: '#8b949e',
+    marginBottom: '32px',
+    fontSize: '0.95rem',
+  },
+  card: {
+    background: '#161b22',
+    border: '1px solid #30363d',
+    borderRadius: '16px',
+    padding: '32px',
+    width: '100%',
+    maxWidth: '480px',
+  },
+  tabs: {
+    display: 'flex',
+    gap: '8px',
+    marginBottom: '28px',
+    background: '#0d1117',
+    borderRadius: '10px',
+    padding: '4px',
+  },
+  tabActive: {
+    flex: 1,
+    padding: '10px',
+    borderRadius: '8px',
+    border: 'none',
+    background: '#1f6feb',
+    color: '#fff',
+    fontWeight: 600,
+    cursor: 'pointer',
+    fontSize: '0.95rem',
+  },
+  tabInactive: {
+    flex: 1,
+    padding: '10px',
+    borderRadius: '8px',
+    border: 'none',
+    background: 'transparent',
+    color: '#8b949e',
+    fontWeight: 500,
+    cursor: 'pointer',
+    fontSize: '0.95rem',
+  },
+  form: {
+    display: 'flex',
+    flexDirection: 'column',
+    gap: '4px',
+  },
+  label: {
+    fontSize: '0.75rem',
+    fontWeight: 600,
+    letterSpacing: '0.08em',
+    color: '#8b949e',
+    marginTop: '12px',
+    marginBottom: '6px',
+  },
+  input: {
+    background: '#0d1117',
+    border: '1px solid #30363d',
+    borderRadius: '8px',
+    color: '#e6edf3',
+    fontSize: '0.95rem',
+    padding: '12px 14px',
+    outline: 'none',
+    width: '100%',
+    boxSizing: 'border-box',
+  },
+  errorBanner: {
+    marginTop: '16px',
+    background: 'rgba(248,81,73,0.15)',
+    border: '1px solid rgba(248,81,73,0.4)',
+    borderRadius: '8px',
+    color: '#f85149',
+    padding: '12px 16px',
+    fontSize: '0.9rem',
+  },
+  infoBanner: {
+    marginTop: '16px',
+    background: 'rgba(31,111,235,0.15)',
+    border: '1px solid rgba(31,111,235,0.4)',
+    borderRadius: '8px',
+    color: '#79c0ff',
+    padding: '12px 16px',
+    fontSize: '0.9rem',
+  },
+  submitBtn: {
+    marginTop: '24px',
+    background: '#1f6feb',
+    color: '#fff',
+    border: 'none',
+    borderRadius: '10px',
+    padding: '14px',
+    fontWeight: 600,
+    fontSize: '1rem',
+    cursor: 'pointer',
+    width: '100%',
+    transition: 'background 0.2s',
+  },
 }
