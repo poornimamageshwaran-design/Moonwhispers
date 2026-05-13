@@ -1,9 +1,3 @@
-// src/components/ProtectedRoute.tsx
-// Wrap any page that requires authentication (and optionally a specific role).
-//
-// Usage:
-//   <ProtectedRoute>              → any logged-in user
-//   <ProtectedRoute role="admin"> → admins only
 
 import React from 'react'
 import { useAuth } from '../lib/useAuth'
