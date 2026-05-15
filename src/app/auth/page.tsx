@@ -153,7 +153,7 @@ export default function AuthPage() {
                     onChange={(e) => setDisplayName(e.target.value)}
                     type="text"
                     autoComplete="name"
-                    placeholder="e.g. Sabari"
+                    placeholder="e.g. Your name"
                   />
                 </motion.div>
               )}
