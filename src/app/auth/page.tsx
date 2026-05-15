@@ -3,16 +3,30 @@
 import { useState } from "react";
 import { supabase } from "@/lib/supabase/browserClient";
 import { useRouter } from "next/navigation";
-import { motion } from "framer-motion";
+import { motion, AnimatePresence } from "framer-motion";
 
 export default function AuthPage() {
   const router = useRouter();
   const [mode, setMode] = useState<"signin" | "signup">("signin");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
+  const [displayName, setDisplayName] = useState("");
   const [status, setStatus] = useState<string | null>(null);
   const [isError, setIsError] = useState(false);
   const [loading, setLoading] = useState(false);
+
+  async function redirectByRole(userId: string) {
+    const { data: profile } = await supabase
+      .from("profiles")
+      .select("role")
+      .eq("id", userId)
+      .maybeSingle();
+    if (profile?.role === "admin") {
+      router.push("/admin");
+    } else {
+      router.push("/");
+    }
+  }
 
   async function submit(e: React.FormEvent) {
     e.preventDefault();
@@ -20,14 +34,36 @@ export default function AuthPage() {
     setLoading(true);
     try {
       if (mode === "signin") {
-        const { error } = await supabase.auth.signInWithPassword({ email, password });
+        const { data, error } = await supabase.auth.signInWithPassword({ email, password });
         if (error) throw error;
-        router.push("/admin");
+        await redirectByRole(data.user.id);
       } else {
-        const { error } = await supabase.auth.signUp({ email, password });
+        if (!displayName.trim()) throw new Error("Please enter your name.");
+        const { data, error } = await supabase.auth.signUp({
+          email,
+          password,
+          options: { data: { display_name: displayName.trim() } },
+        });
         if (error) throw error;
-        setIsError(false);
-        setStatus("Check your email to confirm your account.");
+        if (data.session) {
+          // Email confirmation OFF — user logged in immediately
+          await supabase.from("profiles").upsert(
+            { id: data.user!.id, display_name: displayName.trim(), role: "user" },
+            { onConflict: "id", ignoreDuplicates: true }
+          );
+          // Send welcome email via Resend
+          await fetch("/api/welcome-email", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ email, name: displayName }),
+          });
+          await redirectByRole(data.user!.id);
+        } else {
+          // Email confirmation ON
+          setIsError(false);
+          setStatus("Check your email to confirm your account, then sign in.");
+          setMode("signin");
+        }
       }
     } catch (err) {
       setIsError(true);
@@ -38,9 +74,8 @@ export default function AuthPage() {
   }
 
   return (
-    /* pt-20 clears the fixed navbar; min-h-screen centres vertically below it */
     <div className="relative flex min-h-screen flex-col items-center justify-center px-4 pt-20 pb-12 overflow-hidden">
-      {/* Ambient background glow — blue tones matching logo */}
+      {/* Ambient background glow */}
       <div className="pointer-events-none absolute inset-0">
         <div className="absolute top-1/4 left-1/2 -translate-x-1/2 w-[600px] h-[600px] rounded-full bg-[#2255cc]/8 blur-[130px]" />
         <div className="absolute bottom-1/4 right-1/4 w-[400px] h-[400px] rounded-full bg-[#7ec8ff]/5 blur-[110px]" />
@@ -97,6 +132,33 @@ export default function AuthPage() {
           </div>
 
           <form onSubmit={submit} className="space-y-5">
+
+            {/* Name field — signup only */}
+            <AnimatePresence>
+              {mode === "signup" && (
+                <motion.div
+                  key="name-field"
+                  initial={{ opacity: 0, height: 0 }}
+                  animate={{ opacity: 1, height: "auto" }}
+                  exit={{ opacity: 0, height: 0 }}
+                  transition={{ duration: 0.2 }}
+                  className="overflow-hidden"
+                >
+                  <label className="text-xs font-sans font-medium tracking-[0.15em] uppercase text-[#6a8aaa]">
+                    Your Name
+                  </label>
+                  <input
+                    className="mt-2 w-full rounded-xl border border-[#1a2a3a]/80 bg-[#080c14]/60 px-4 py-3 text-sm font-sans text-[#d0e8f8] placeholder-[#2a3a4a] outline-none transition-all duration-200 focus:border-[#5a9fff]/50 focus:shadow-[0_0_0_1px_rgba(90,160,255,0.12)]"
+                    value={displayName}
+                    onChange={(e) => setDisplayName(e.target.value)}
+                    type="text"
+                    autoComplete="name"
+                    placeholder="e.g. Sabari"
+                  />
+                </motion.div>
+              )}
+            </AnimatePresence>
+
             <div>
               <label className="text-xs font-sans font-medium tracking-[0.15em] uppercase text-[#6a8aaa]">
                 Email
@@ -108,8 +170,10 @@ export default function AuthPage() {
                 type="email"
                 autoComplete="email"
                 placeholder="you@example.com"
+                required
               />
             </div>
+
             <div>
               <label className="text-xs font-sans font-medium tracking-[0.15em] uppercase text-[#6a8aaa]">
                 Password
@@ -121,22 +185,28 @@ export default function AuthPage() {
                 type="password"
                 autoComplete={mode === "signin" ? "current-password" : "new-password"}
                 placeholder="••••••••"
+                required
+                minLength={6}
               />
             </div>
 
-            {status && (
-              <motion.div
-                initial={{ opacity: 0, y: -6 }}
-                animate={{ opacity: 1, y: 0 }}
-                className={`rounded-xl border px-4 py-3 text-sm font-sans ${
-                  isError
-                    ? "border-red-900/50 bg-red-950/30 text-red-400"
-                    : "border-[#5a9fff]/25 bg-[#2255cc]/10 text-[#a0c8ff]"
-                }`}
-              >
-                {status}
-              </motion.div>
-            )}
+            <AnimatePresence>
+              {status && (
+                <motion.div
+                  key="status"
+                  initial={{ opacity: 0, y: -6 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  exit={{ opacity: 0 }}
+                  className={`rounded-xl border px-4 py-3 text-sm font-sans ${
+                    isError
+                      ? "border-red-900/50 bg-red-950/30 text-red-400"
+                      : "border-[#5a9fff]/25 bg-[#2255cc]/10 text-[#a0c8ff]"
+                  }`}
+                >
+                  {status}
+                </motion.div>
+              )}
+            </AnimatePresence>
 
             <button
               type="submit"
