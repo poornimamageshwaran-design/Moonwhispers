@@ -15,7 +15,10 @@ export const metadata: Metadata = {
     template: "%s | Moon Whispers"
   },
   description:
-    "A premium travel & storytelling blog with cinematic notes, community comments, and admin-ready CMS."
+    "A premium travel & storytelling blog with cinematic notes, community comments, and admin-ready CMS.",
+  verification: {
+    google: "4FybeuED8RRaJyXlUWKDaND0SOVOq9UrihBMqzBrI_U",
+  },
 };
 
 export default function RootLayout({ children }: { children: ReactNode }) {
@@ -23,7 +26,6 @@ export default function RootLayout({ children }: { children: ReactNode }) {
     <html lang="en" suppressHydrationWarning className="dark">
       <head>
         <script
-          // Keep theme logic tiny to avoid hydration mismatch flashes.
           dangerouslySetInnerHTML={{
             __html: `
               (function () {
